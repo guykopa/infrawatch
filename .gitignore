@@ -8,6 +8,7 @@ build/
 .pytest_cache/
 .mypy_cache/
 .coverage
+.coveragerc
 htmlcov/
 
 # Env
