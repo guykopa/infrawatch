@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - run: pip install -r app/requirements.txt
+      - run: flake8 infrawatch/ app/
+      - run: mypy infrawatch/ app/
+
+  test:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - run: pip install -r app/requirements.txt
+      - run: pytest --cov=infrawatch --cov=app --cov-fail-under=80 -q
+
+  build-and-push:
+    runs-on: self-hosted
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t "ghcr.io/guykopa/infrawatch-app:${{ github.sha }}" -f docker/Dockerfile .
+
+      - name: Push image
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ghcr.io -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+          docker push "ghcr.io/guykopa/infrawatch-app:${{ github.sha }}"
+
+  security:
+    runs-on: self-hosted
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image for scan
+        run: docker build -t "ghcr.io/guykopa/infrawatch-app:${{ github.sha }}" -f docker/Dockerfile .
+
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ghcr.io/guykopa/infrawatch-app:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"

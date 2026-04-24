@@ -1,0 +1,46 @@
+name: CD Production
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  deploy-prod:
+    runs-on: self-hosted
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG_PROD }}" > /tmp/kubeconfig-prod
+          chmod 600 /tmp/kubeconfig-prod
+
+      - name: Deploy to production
+        run: |
+          kubectl apply -f k8s/ -n infrawatch
+          kubectl set image deployment/infrawatch-app infrawatch-app=ghcr.io/guykopa/infrawatch-app:${{ github.sha }} -n infrawatch
+          kubectl rollout status deployment/infrawatch-app -n infrawatch --timeout=300s
+        env:
+          KUBECONFIG: /tmp/kubeconfig-prod
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Check SLO
+        env:
+          PROMETHEUS_URL: ${{ vars.PROMETHEUS_URL }}
+        run: python3 scripts/check_slo.py
+
+      - name: Auto-rollback on failure
+        if: failure()
+        run: ./scripts/rollback.sh
+        env:
+          NAMESPACE: infrawatch
+          KUBECONFIG: /tmp/kubeconfig-prod

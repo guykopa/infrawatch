@@ -1,0 +1,57 @@
+name: CD Staging
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-staging:
+    runs-on: self-hosted
+    environment:
+      name: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt
+          pip install -r app/requirements.txt
+
+      - name: Write kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG_STAGING }}" > /tmp/kubeconfig-staging
+          chmod 600 /tmp/kubeconfig-staging
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform plan + apply
+        working-directory: terraform
+        run: |
+          terraform init -input=false
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false tfplan
+        env:
+          TF_VAR_image: ghcr.io/guykopa/infrawatch-app:${{ github.sha }}
+
+      - name: Deploy to staging
+        run: |
+          kubectl apply -f k8s/ -n infrawatch-staging
+          kubectl set image deployment/infrawatch-app infrawatch-app=ghcr.io/guykopa/infrawatch-app:${{ github.sha }} -n infrawatch-staging
+          kubectl rollout status deployment/infrawatch-app -n infrawatch-staging --timeout=120s
+        env:
+          KUBECONFIG: /tmp/kubeconfig-staging
+
+      - name: Smoke tests
+        run: pytest tests/non_regression/ -q
+
+      - name: Rollback on failure
+        if: failure()
+        run: ./scripts/rollback.sh
+        env:
+          NAMESPACE: infrawatch-staging
+          KUBECONFIG: /tmp/kubeconfig-staging
