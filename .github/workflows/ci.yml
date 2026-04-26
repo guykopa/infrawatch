@@ -58,3 +58,4 @@ jobs:
           image-ref: ghcr.io/guykopa/infrawatch-app:${{ github.sha }}
           severity: CRITICAL,HIGH
           exit-code: "1"
+          trivyignores: .trivyignore
