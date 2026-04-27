@@ -37,11 +37,15 @@ jobs:
             -backend-config="path=/home/kopa/terraform-state/staging.tfstate"
           terraform import -input=false \
             module.kubernetes.kubernetes_namespace.infrawatch infrawatch-staging \
-            2>/dev/null || true
+            >/dev/null 2>&1 || true
           terraform import -input=false \
             module.monitoring.kubernetes_config_map.prometheus \
             infrawatch-staging/prometheus-config \
-            2>/dev/null || true
+            >/dev/null 2>&1 || true
+          terraform import -input=false \
+            module.kubernetes.kubernetes_deployment.app \
+            infrawatch-staging/infrawatch-app \
+            >/dev/null 2>&1 || true
           terraform plan -input=false -out=tfplan
           terraform apply -input=false tfplan
         env:
