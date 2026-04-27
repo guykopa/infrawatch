@@ -32,17 +32,32 @@ jobs:
       - name: Terraform plan + apply
         working-directory: terraform
         run: |
-          terraform init -input=false
+          mkdir -p /home/kopa/terraform-state
+          terraform init -input=false \
+            -backend-config="path=/home/kopa/terraform-state/staging.tfstate"
+          terraform import -input=false \
+            module.kubernetes.kubernetes_namespace.infrawatch infrawatch-staging \
+            2>/dev/null || true
+          terraform import -input=false \
+            module.monitoring.kubernetes_config_map.prometheus \
+            infrawatch-staging/prometheus-config \
+            2>/dev/null || true
           terraform plan -input=false -out=tfplan
           terraform apply -input=false tfplan
         env:
           TF_VAR_image: ghcr.io/guykopa/infrawatch-app:${{ github.sha }}
+          TF_VAR_namespace: infrawatch-staging
+          TF_VAR_kubeconfig_path: /tmp/kubeconfig-staging
+          KUBECONFIG: /tmp/kubeconfig-staging
 
       - name: Deploy to staging
         run: |
           kubectl apply -f k8s/ -n infrawatch-staging
-          kubectl set image deployment/infrawatch-app infrawatch-app=ghcr.io/guykopa/infrawatch-app:${{ github.sha }} -n infrawatch-staging
-          kubectl rollout status deployment/infrawatch-app -n infrawatch-staging --timeout=120s
+          kubectl set image deployment/infrawatch-app \
+            infrawatch-app=ghcr.io/guykopa/infrawatch-app:${{ github.sha }} \
+            -n infrawatch-staging
+          kubectl rollout status deployment/infrawatch-app \
+            -n infrawatch-staging --timeout=120s
         env:
           KUBECONFIG: /tmp/kubeconfig-staging
 
