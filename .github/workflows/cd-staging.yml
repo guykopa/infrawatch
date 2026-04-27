@@ -51,8 +51,6 @@ jobs:
         env:
           TF_VAR_image: ghcr.io/guykopa/infrawatch-app:${{ github.sha }}
           TF_VAR_namespace: infrawatch-staging
-          TF_VAR_kubeconfig_path: /tmp/kubeconfig-staging
-          KUBECONFIG: /tmp/kubeconfig-staging
 
       - name: Deploy to staging
         run: |
@@ -62,8 +60,6 @@ jobs:
             -n infrawatch-staging
           kubectl rollout status deployment/infrawatch-app \
             -n infrawatch-staging --timeout=120s
-        env:
-          KUBECONFIG: /tmp/kubeconfig-staging
 
       - name: Smoke tests
         run: pytest tests/non_regression/ -q
@@ -73,4 +69,3 @@ jobs:
         run: ./scripts/rollback.sh
         env:
           NAMESPACE: infrawatch-staging
-          KUBECONFIG: /tmp/kubeconfig-staging
